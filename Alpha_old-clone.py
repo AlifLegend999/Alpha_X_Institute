@@ -46,16 +46,143 @@ class SubscriptionManager:
         self.device_id = self.get_device_id()
         self.subscription_key = self.generate_subscription_key()
         
-    def get_device_id(self):
-        """Generate a unique device ID based only on MAC address for stability"""
+    def get_mac_address(self):
+        """Get stable MAC address from network interface"""
         try:
-            mac = uuid.getnode()
-            if (mac >> 40) % 2:
-                # If MAC is a random value (locally administered), fallback
-                return 'STATIC_DEVICE_ID_FALLBACK'
-            return hex(mac)[2:].upper()
+            import subprocess
+            import re
+            
+            if platform.system() == "Linux":
+                # Android/Linux: Get MAC from ip command
+                try:
+                    result = subprocess.run(['ip', 'link', 'show'], capture_output=True, text=True)
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        if 'link/ether' in line and '00:00:00:00:00:00' not in line:
+                            mac = re.search(r'([0-9a-f]{2}:){5}[0-9a-f]{2}', line)
+                            if mac and not mac.group().startswith('00:00:00'):
+                                return mac.group().replace(':', '')
+                except:
+                    pass
+                
+                # Fallback to ifconfig
+                try:
+                    result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        if 'ether' in line and '00:00:00:00:00:00' not in line:
+                            mac = re.search(r'([0-9a-f]{2}:){5}[0-9a-f]{2}', line)
+                            if mac and not mac.group().startswith('00:00:00'):
+                                return mac.group().replace(':', '')
+                except:
+                    pass
+            else:
+                # Windows: Get MAC from ipconfig
+                try:
+                    result = subprocess.run(['ipconfig', '/all'], capture_output=True, text=True)
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        if ('Physical Address' in line or 'MAC Address' in line) and '00-00-00-00-00-00' not in line:
+                            mac = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', line)
+                            if mac and not mac.group().startswith('00-00-00'):
+                                return mac.group().replace('-', '').replace(':', '')
+                except:
+                    pass
+            
+            # Ultimate fallback
+            import uuid
+            return hex(uuid.getnode())[2:].zfill(12)
         except:
-            return 'STATIC_DEVICE_ID_FALLBACK'
+            return "000000000000"
+
+    def get_stable_device_id(self):
+        """Get a stable device identifier that doesn't change"""
+        try:
+            import platform
+            import hashlib
+            import subprocess
+            import os
+
+            # Check if this is Android device
+            is_android = platform.system() == "Linux" and os.path.exists("/system/bin/getprop")
+            
+            if is_android:
+                # Android: Use hardware-based unique ID
+                try:
+                    # Method 1: Get Android ID (most stable)
+                    android_id = subprocess.check_output("settings get secure android_id", shell=True).decode().strip()
+                    if android_id and len(android_id) > 8:
+                        return hashlib.md5(android_id.encode()).hexdigest()[:16]
+                except:
+                    pass
+                
+                try:
+                    # Method 2: Get device serial
+                    serial = subprocess.check_output("getprop ro.boot.serialno", shell=True).decode().strip()
+                    if not serial:
+                        serial = subprocess.check_output("getprop ro.serialno", shell=True).decode().strip()
+                    if serial and len(serial) > 4:
+                        return hashlib.md5(serial.encode()).hexdigest()[:16]
+                except:
+                    pass
+                
+                try:
+                    # Method 3: Get IMEI (if available)
+                    imei = subprocess.check_output("getprop ro.ril.oem.imei", shell=True).decode().strip()
+                    if not imei:
+                        imei = subprocess.check_output("getprop persist.radio.imei", shell=True).decode().strip()
+                    if imei and len(imei) > 8:
+                        return hashlib.md5(imei.encode()).hexdigest()[:16]
+                except:
+                    pass
+                
+                try:
+                    # Method 4: Get MAC address from WiFi
+                    mac = subprocess.check_output("cat /sys/class/net/wlan0/address", shell=True).decode().strip()
+                    if mac and len(mac) > 10:
+                        return hashlib.md5(mac.replace(':', '').encode()).hexdigest()[:16]
+                except:
+                    pass
+                
+                try:
+                    # Method 5: Get device fingerprint
+                    fingerprint = subprocess.check_output("getprop ro.build.fingerprint", shell=True).decode().strip()
+                    if fingerprint:
+                        return hashlib.md5(fingerprint.encode()).hexdigest()[:16]
+                except:
+                    pass
+                
+                # Method 6: Fallback - combine multiple properties
+                try:
+                    model = subprocess.check_output("getprop ro.product.model", shell=True).decode().strip()
+                    brand = subprocess.check_output("getprop ro.product.brand", shell=True).decode().strip()
+                    device = subprocess.check_output("getprop ro.product.device", shell=True).decode().strip()
+                    combined = f"{brand}:{model}:{device}"
+                    return hashlib.md5(combined.encode()).hexdigest()[:16]
+                except:
+                    pass
+            else:
+                # Non-Android: Use system info + MAC
+                info = platform.uname()
+                system_info = f"{info.system}-{info.machine}-{info.release}"
+                mac = self.get_mac_address()
+                combined = f"{system_info}:{mac}"
+                return hashlib.md5(combined.encode()).hexdigest()[:16]
+            
+            # Ultimate fallback
+            return hashlib.md5("MOBILE_DEVICE_ID".encode()).hexdigest()[:16]
+            
+        except Exception as e:
+            # Ultimate fallback - always same for this device
+            return hashlib.md5("PERMANENT_DEVICE_ID".encode()).hexdigest()[:16]
+
+    def get_device_id(self):
+        """Generate a unique device ID based on stable hardware identifiers"""
+        try:
+            # Use the new stable device ID method
+            return self.get_stable_device_id()
+        except Exception:
+            return "DEVICE_ID_ERROR"
     
     def generate_subscription_key(self):
         """Generate a subscription key based on device ID"""
@@ -137,7 +264,7 @@ class SubscriptionManager:
     def display_subscription_info(self):
         """Display subscription information and instructions (screenshot style, mobile-friendly)"""
         print(SubscriptionManager.pro_banner())
-        print('\x1b[1;92m[~] WELCOME to ALPHA-X ZONE 🚀✨\x1b[0m')
+        print('\x1b[1;92m[~] WELCOME to ALPHA-X Institute 🚀✨\x1b[0m')
         print('\x1b[1;96m[~] CREATOR: MR Likhon⚠️\x1b[0m')
         print()
         print("\x1b[1;92m[~] YOU KEY IS NOT \x1b[1;91mACTIVATE\x1b[0m")
@@ -174,7 +301,7 @@ class SubscriptionManager:
 \x1b[1;96m   ➤ \x1b[1;97mCreator        : \x1b[1;96mMR Likhon⚠️
 \x1b[1;96m   ➤ \x1b[1;97mOperated By    : \x1b[1;92mALIF
 \x1b[1;96m   ➤ \x1b[1;97mTool Access    : \x1b[1;93mPAID
-\x1b[1;96m   ➤ \x1b[1;97mCurrent Version: \x1b[1;95m0.2
+\x1b[1;96m   ➤ \x1b[1;97mCurrent Version: \x1b[1;95m2.2
 \x1b[1;92m─────────────────────────────────────────────────────────''')
 
 def check_subscription_before_start():
@@ -201,9 +328,9 @@ check_subscription_before_start()
 # Initial Setup & Welcome
 # ===================================================================
 
-print('\x1b[1;92m[~] WELCOME to ALPHA-X ZONE 🚀✨\x1b[0m')
+print('\x1b[1;92m[~] WELCOME to ALPHA-X Institute 🚀✨\x1b[0m')
 print('\x1b[1;96m[~] CREATOR: MR Likhon⚠️\x1b[0m')
-os.system('xdg-open https://t.me/AlphaX_Zone')
+os.system('xdg-open https://t.me/AlphaX_Institute')
 time.sleep(2)
 
 # ===================================================================
