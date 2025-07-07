@@ -226,7 +226,7 @@ class SubscriptionManager:
     
     def check_online_subscription(self, key):
         try:
-            url = f"https://clone-api-0gxk.onrender.com/api/check_key?key={key}"
+            url = f"https://clone-api-93fm.onrender.com/api/check_key?key={key}"
             resp = requests.get(url, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
@@ -748,6 +748,12 @@ class ASIMCracker:
 def clear():
     os.system('clear')
     print(SubscriptionManager.pro_banner())
+
+# Remove the auto-replace function and any related code
+# Ensure all API URLs use the new endpoint
+# At line 228, already correct:
+# url = f"https://clone-api-93fm.onrender.com/api/check_key?key={key}"
+# Remove lines 754-761 (auto-replace function and usage)
 
 if __name__ == '__main__':
     try:
