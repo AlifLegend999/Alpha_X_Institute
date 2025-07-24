@@ -1,0 +1,47 @@
+#!/data/data/com.termux/files/usr/bin/python
+
+import platform
+import os
+import sys
+
+os.system("git pull")
+
+# Check architecture
+bit = platform.architecture()[0]
+machine = platform.machine()
+
+print(f"[Info] Detected bit: {bit}, machine: {machine}")
+
+if machine == 'aarch64':
+    # ARM 64bit
+    try:
+        import Ab1_enc
+    except ImportError as e:
+        print("[Error] Failed to import Ab1_enc for aarch64 (ARM 64bit) system.")
+        print("Details:", e)
+        sys.exit(1)
+
+elif machine == 'armv7l':
+    # ARM 32bit
+    os.system("chmod +x Alpha_old-clone.py")
+    exit_code = os.system("python Alpha_old-clone.py")
+    if exit_code != 0:
+        exit_code = os.system("python3 Alpha_old-clone.py")
+        if exit_code != 0:
+            print("[Error] Failed to run Alpha_old-clone.py with both python and python3.")
+            sys.exit(1)
+
+elif machine == 'x86_64':
+    # x86_64 Intel/AMD 64bit
+    print("[Info] x86_64 system detected. Running Alpha_old-clone.py instead of importing ARM-specific .so file.")
+    os.system("chmod +x Alpha_old-clone.py")
+    exit_code = os.system("python Alpha_old-clone.py")
+    if exit_code != 0:
+        exit_code = os.system("python3 Alpha_old-clone.py")
+        if exit_code != 0:
+            print("[Error] Failed to run Alpha_old-clone.py with both python and python3.")
+            sys.exit(1)
+
+else:
+    print(f"[Error] Unknown or unsupported architecture detected: {machine}")
+    sys.exit(1)
