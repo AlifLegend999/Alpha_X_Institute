@@ -15,9 +15,9 @@ print(f"[Info] Detected bit: {bit}, machine: {machine}")
 if machine == 'aarch64':
     # ARM 64bit
     try:
-        import Ab1_enc
+        import Alpha
     except ImportError as e:
-        print("[Error] Failed to import Ab1_enc for aarch64 (ARM 64bit) system.")
+        print("[Error] Failed to import Alpha for aarch64 (ARM 64bit) system.")
         print("Details:", e)
         sys.exit(1)
 
